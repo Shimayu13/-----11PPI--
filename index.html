@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>心拍周期（PPI）計算Webアプリ</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+      background: #f5f7fb;
+      color: #222;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto 0 auto;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 4px 24px rgba(70,120,200,0.08), 0 1.5px 5px rgba(60,90,150,0.04);
+      padding: 32px 28px 36px 28px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.7em;
+      color: #2562ad;
+      margin-bottom: 16px;
+      letter-spacing: 0.01em;
+    }
+    p {
+      text-align: center;
+      color: #444;
+      font-size: 1.08em;
+    }
+    #excelFile {
+      display: block;
+      margin: 22px auto 0 auto;
+      padding: 10px 20px;
+      border: 1px solid #b9c6d8;
+      border-radius: 8px;
+      background: #f4f8fc;
+      cursor: pointer;
+      transition: border 0.2s;
+      font-size: 1em;
+    }
+    #excelFile:focus {
+      outline: none;
+      border-color: #2562ad;
+    }
+    #output {
+      margin-top: 34px;
+      min-height: 50px;
+    }
+    table {
+      border-collapse: separate;
+      border-spacing: 0;
+      width: 100%;
+      margin-top: 0.5em;
+      box-shadow: 0 2px 8px rgba(70,120,200,0.07);
+      background: #f9fbfe;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e3e9f0;
+      font-size: 1em;
+      text-align: right;
+    }
+    th {
+      background: #e7f0fb;
+      color: #2562ad;
+      font-weight: 600;
+      border-top: none;
+      text-align: center;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .summary {
+      margin-top: 26px;
+      background: #f1f8ff;
+      border-radius: 10px;
+      padding: 18px 22px;
+      font-size: 1.12em;
+      box-shadow: 0 2px 8px rgba(120,170,230,0.07);
+      color: #2260b1;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .error {
+      color: #d62828;
+      background: #fff3f3;
+      border: 1px solid #f5c2c2;
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-top: 18px;
+      text-align: center;
+      font-weight: 500;
+      font-size: 1.13em;
+    }
+    @media (max-width: 650px) {
+      .container {
+        max-width: 97vw;
+        padding: 8vw 2vw 11vw 2vw;
+      }
+      table, th, td {
+        font-size: 0.97em;
+      }
+      h1 {
+        font-size: 1.15em;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>心拍周期（PPI）自動計算Webアプリ</h1>
+    <p>Excelファイル（1列：アンプリチュードのみ）をアップロードしてください。</p>
+    <input type="file" id="excelFile" accept=".xlsx, .xls"/>
+    <div id="output"></div>
+  </div>
+  <script>
+    const fs = 409.6;
+    const windowSize = Math.round(fs * 1.0);
+
+    function crossCorrelation(a, b) {
+      const n = a.length, m = b.length, len = n + m - 1, result = new Array(len).fill(0);
+      for (let lag = -(n - 1); lag < m; lag++) {
+        let sum = 0;
+        for (let i = 0; i < n; i++) {
+          const j = i + lag;
+          if (j >= 0 && j < m) sum += a[i] * b[j];
+        }
+        result[lag + n - 1] = sum;
+      }
+      return result;
+    }
+
+    function stddev(arr) {
+      const mean = arr.reduce((a,b)=>a+b,0) / arr.length;
+      return Math.sqrt(arr.reduce((a,b)=>a+(b-mean)**2,0)/(arr.length-1));
+    }
+
+    document.getElementById('excelFile').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const data = new Uint8Array(ev.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const raw = XLSX.utils.sheet_to_json(sheet, {header:1});
+        const amplitude = raw.flat().filter(x => typeof x === 'number');
+        const output = document.getElementById('output');
+        if (amplitude.length < windowSize*2) {
+          output.innerHTML = "<div class='error'>データが少なすぎます。もっと長い記録をアップロードしてください。</div>";
+          return;
+        }
+        let ppis = [], peakIndices = [], startIdx = 0;
+        while ((startIdx + 2 * windowSize) <= amplitude.length) {
+          const refWin = amplitude.slice(startIdx, startIdx + windowSize);
+          const nextWin = amplitude.slice(startIdx + windowSize, startIdx + 2 * windowSize);
+          const corr = crossCorrelation(nextWin, refWin);
+          const lag = corr.indexOf(Math.max(...corr)) - (windowSize - 1);
+          const ppi_samples = windowSize + lag;
+          const ppi_sec = ppi_samples / fs;
+          ppis.push(ppi_sec);
+          peakIndices.push(startIdx + windowSize + lag);
+          startIdx += windowSize;
+        }
+        let html = "";
+        if (ppis.length === 0) {
+          html += "<div class='error'>PPIが検出できませんでした。</div>";
+        } else {
+          html += "<table><thead><tr><th>ピーク位置<br><small>(peak_index)</small></th><th>PPI（秒）</th></tr></thead><tbody>";
+          for (let i = 0; i < ppis.length; i++) {
+            html += `<tr><td>${peakIndices[i]}</td><td>${ppis[i].toFixed(3)}</td></tr>`;
+          }
+          html += "</tbody></table>";
+          html += `<div class="summary">平均PPI：<span style="font-size:1.15em;">${ (ppis.reduce((a,b)=>a+b,0)/ppis.length).toFixed(3)} 秒</span><br>
+                   PPI標準偏差：<span style="font-size:1.08em;">${ stddev(ppis).toFixed(3)} 秒</span></div>`;
+        }
+        output.innerHTML = html;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>
