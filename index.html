@@ -2,71 +2,283 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>心拍周期（PPI）2方式解析Webアプリ</title>
+  <title>運動前後PPI計算統合Webアプリ</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    /* --- 略: 先ほどまでのCSSと同様 --- */
-    body {font-family:'Segoe UI','Hiragino Sans','Meiryo',sans-serif;background:#f5f7fb;color:#222;margin:0;padding:0;}
-    .container{max-width:700px;margin:40px auto 0 auto;background:#fff;border-radius:18px;box-shadow:0 4px 24px rgba(70,120,200,0.08),0 1.5px 5px rgba(60,90,150,0.04);padding:32px 28px 36px 28px;}
-    h1{text-align:center;font-size:1.7em;color:#2562ad;margin-bottom:16px;letter-spacing:0.01em;}
-    p{text-align:center;color:#444;font-size:1.08em;}
-    #excelFile{display:block;margin:22px auto 0 auto;padding:10px 20px;border:1px solid #b9c6d8;border-radius:8px;background:#f4f8fc;cursor:pointer;transition:border 0.2s;font-size:1em;}
-    #excelFile:focus{outline:none;border-color:#2562ad;}
-    #output{margin-top:34px;min-height:50px;}
-    table{border-collapse:separate;border-spacing:0;width:100%;margin-top:0.5em;box-shadow:0 2px 8px rgba(70,120,200,0.07);background:#f9fbfe;border-radius:12px;overflow:hidden;}
-    th,td{padding:10px 12px;border-bottom:1px solid #e3e9f0;font-size:1em;text-align:right;}
-    th{background:#e7f0fb;color:#2562ad;font-weight:600;border-top:none;text-align:center;}
-    tr:last-child td{border-bottom:none;}
-    .summary{margin-top:26px;background:#f1f8ff;border-radius:10px;padding:18px 22px;font-size:1.12em;box-shadow:0 2px 8px rgba(120,170,230,0.07);color:#2260b1;font-weight:500;letter-spacing:0.02em;}
-    .error{color:#d62828;background:#fff3f3;border:1px solid #f5c2c2;padding:16px 20px;border-radius:10px;margin-top:18px;text-align:center;font-weight:500;font-size:1.13em;}
-    .chart-area{margin-top:38px;background:#f7fbfd;border-radius:15px;box-shadow:0 2px 7px rgba(90,150,220,0.09);padding:20px 14px 28px 14px;width:100%;overflow-x:auto;}
-    .chart-area-inner{width:2000px;min-width:430px;margin:0 auto;}
-    .chart-area canvas{width:2000px !important;height:300px !important;background:#fff;border-radius:8px;}
-    @media (max-width:750px){
-      .container{max-width:97vw;padding:8vw 2vw 11vw 2vw;}
-      table,th,td{font-size:0.97em;}
-      h1{font-size:1.15em;}
-      .chart-area-inner,.chart-area canvas{width:700px !important;min-width:250px !important;height:230px !important;}
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+      background: #f5f7fb;
+      color: #222;
+      margin: 0;
+      padding: 0;
     }
-    .result-method {
-      margin-top: 30px;
-      padding: 18px 12px;
-      background: #f4f8ff;
-      border-radius: 13px;
-      box-shadow: 0 1.5px 5px rgba(60,90,150,0.05);
-      margin-bottom: 28px;
+    .container {
+      max-width: 900px;
+      margin: 40px auto 0 auto;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 4px 24px rgba(70,120,200,0.08), 0 1.5px 5px rgba(60,90,150,0.04);
+      padding: 32px 28px 36px 28px;
     }
-    .result-method h2 {
+    h1 {
+      text-align: center;
+      font-size: 1.8em;
       color: #2562ad;
-      font-size: 1.15em;
-      margin-bottom: 12px;
-      margin-top: 0;
-      text-align: left;
-      font-weight: bold;
+      margin-bottom: 16px;
+      letter-spacing: 0.01em;
+    }
+    .description {
+      text-align: center;
+      color: #444;
+      font-size: 1.08em;
+      margin-bottom: 24px;
+    }
+    #excelFile {
+      display: block;
+      margin: 22px auto 0 auto;
+      padding: 10px 20px;
+      border: 1px solid #b9c6d8;
+      border-radius: 8px;
+      background: #f4f8fc;
+      cursor: pointer;
+      transition: border 0.2s;
+      font-size: 1em;
+    }
+    #excelFile:focus {
+      outline: none;
+      border-color: #2562ad;
+    }
+    .results-container {
+      display: flex;
+      gap: 30px;
+      margin-top: 40px;
+    }
+    .method-section {
+      flex: 1;
+      background: #f9fbfe;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(70,120,200,0.07);
+    }
+    .method-title {
+      font-size: 1.3em;
+      font-weight: 600;
+      color: #2562ad;
+      margin-bottom: 16px;
+      text-align: center;
+      padding: 8px 12px;
+      background: #e7f0fb;
+      border-radius: 8px;
+    }
+    .method-description {
+      font-size: 0.95em;
+      color: #666;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    table {
+      border-collapse: separate;
+      border-spacing: 0;
+      width: 100%;
+      margin-top: 0.5em;
+      box-shadow: 0 2px 8px rgba(70,120,200,0.07);
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 0.9em;
+    }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e3e9f0;
+      text-align: right;
+    }
+    th {
+      background: #e7f0fb;
+      color: #2562ad;
+      font-weight: 600;
+      border-top: none;
+      text-align: center;
+      font-size: 0.85em;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .summary {
+      margin-top: 16px;
+      background: #f1f8ff;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 1em;
+      box-shadow: 0 2px 8px rgba(120,170,230,0.07);
+      color: #2260b1;
+      font-weight: 500;
+    }
+    .error {
+      color: #d62828;
+      background: #fff3f3;
+      border: 1px solid #f5c2c2;
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-top: 18px;
+      text-align: center;
+      font-weight: 500;
+      font-size: 1.13em;
+    }
+    .chart-area {
+      margin-top: 38px;
+      background: #f7fbfd;
+      border-radius: 15px;
+      box-shadow: 0 2px 7px rgba(90,150,220,0.09);
+      padding: 20px 14px 28px 14px;
+      width: 100%;
+      overflow-x: auto;
+    }
+    .chart-area-inner {
+      width: 2000px;
+      min-width: 430px;
+      margin: 0 auto;
+    }
+    .chart-area canvas {
+      width: 2000px !important;
+      height: 300px !important;
+      background: #fff;
+      border-radius: 8px;
+    }
+    .comparison-summary {
+      margin-top: 30px;
+      background: linear-gradient(135deg, #e8f4f8 0%, #f1f8ff 100%);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 3px 12px rgba(120,170,230,0.12);
+    }
+    .comparison-title {
+      font-size: 1.4em;
+      font-weight: 600;
+      color: #2562ad;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .comparison-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .stat-item {
+      background: #fff;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(70,120,200,0.08);
+    }
+    .stat-label {
+      font-size: 0.9em;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-size: 1.2em;
+      font-weight: 600;
+      color: #2562ad;
+    }
+    @media (max-width: 768px) {
+      .results-container {
+        flex-direction: column;
+        gap: 20px;
+      }
+      .comparison-stats {
+        grid-template-columns: 1fr;
+      }
+      .container {
+        max-width: 97vw;
+        padding: 8vw 2vw 11vw 2vw;
+      }
+      h1 {
+        font-size: 1.4em;
+      }
+      .chart-area-inner, .chart-area canvas {
+        width: 700px !important;
+        min-width: 250px !important;
+        height: 230px !important;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>心拍周期（PPI）<br>2方式解析Webアプリ</h1>
-    <p>Excelファイル（1列：アンプリチュードのみ）をアップロードしてください。</p>
+    <h1>運動前後PPI計算統合Webアプリ</h1>
+    <div class="description">
+      Excelファイル（1列：アンプリチュードのみ）をアップロードしてください。<br>
+      相互相関法とピーク検出法の両方でPPIを計算し、結果を比較表示します。
+    </div>
     <input type="file" id="excelFile" accept=".xlsx, .xls"/>
+    
     <div class="chart-area" style="display:none">
-      <h3 style="text-align:center;color:#2562ad;font-size:1.05em;font-weight:600;margin:10px 0 18px 0;">アンプリチュード推移グラフ</h3>
+      <h3 style="text-align:center;color:#2562ad;font-size:1.2em;font-weight:600;margin:10px 0 18px 0;">アンプリチュード推移グラフ</h3>
       <div class="chart-area-inner">
         <canvas id="ampChart"></canvas>
       </div>
     </div>
-    <div id="output"></div>
+
+    <div class="results-container" id="resultsContainer" style="display:none">
+      <div class="method-section">
+        <div class="method-title">相互相関法</div>
+        <div class="method-description">運動前の安定した心拍に適用<br>（ウィンドウベースの相関解析）</div>
+        <div id="correlationOutput"></div>
+      </div>
+      
+      <div class="method-section">
+        <div class="method-title">ピーク検出法</div>
+        <div class="method-description">運動後の不安定な心拍に適用<br>（極大値検出による直接計算）</div>
+        <div id="peakOutput"></div>
+      </div>
+    </div>
+
+    <div class="comparison-summary" id="comparisonSummary" style="display:none">
+      <div class="comparison-title">結果比較</div>
+      <div class="comparison-stats">
+        <div class="stat-item">
+          <div class="stat-label">相互相関法 平均PPI</div>
+          <div class="stat-value" id="corrMean">-</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">ピーク検出法 平均PPI</div>
+          <div class="stat-value" id="peakMean">-</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">相互相関法 標準偏差</div>
+          <div class="stat-value" id="corrStd">-</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">ピーク検出法 標準偏差</div>
+          <div class="stat-value" id="peakStd">-</div>
+        </div>
+      </div>
+    </div>
   </div>
+
   <script>
     const fs = 409.6;
+    const windowSize = Math.round(fs * 1.0);
     let ampChart = null;
 
-    // 方式A: minDistanceメイン（運動後向け）
-    function findPeaksDistance(data, minDistance) {
+    // 相互相関関数
+    function crossCorrelation(a, b) {
+      const n = a.length, m = b.length, len = n + m - 1, result = new Array(len).fill(0);
+      for (let lag = -(n - 1); lag < m; lag++) {
+        let sum = 0;
+        for (let i = 0; i < n; i++) {
+          const j = i + lag;
+          if (j >= 0 && j < m) sum += a[i] * b[j];
+        }
+        result[lag + n - 1] = sum;
+      }
+      return result;
+    }
+
+    // ピーク検出関数
+    function findPeaks(data, minDistance) {
       const peaks = [];
       let lastPeak = -minDistance;
       for (let i = 1; i < data.length - 1; i++) {
@@ -79,29 +291,48 @@
       }
       return peaks;
     }
-    // 方式B: プロミネンスメイン（運動前向け）
-    function findPeaksProminence(data, minDistance, minProminence) {
-      const peaks = [];
-      let lastPeak = -minDistance;
-      for (let i = 1; i < data.length - 1; i++) {
-        const prominence = Math.min(data[i] - data[i-1], data[i] - data[i+1]);
-        if (data[i] > data[i-1] && data[i] > data[i+1] && prominence > minProminence) {
-          if (i - lastPeak >= minDistance) {
-            peaks.push(i);
-            lastPeak = i;
-          }
-        }
-      }
-      return peaks;
-    }
+
+    // 標準偏差計算
     function stddev(arr) {
+      if (arr.length <= 1) return 0;
       const mean = arr.reduce((a,b)=>a+b,0) / arr.length;
       return Math.sqrt(arr.reduce((a,b)=>a+(b-mean)**2,0)/(arr.length-1));
+    }
+
+    // 相互相関法でPPI計算
+    function calculatePPIByCorrelation(amplitude) {
+      let ppis = [], peakIndices = [], startIdx = 0;
+      while ((startIdx + 2 * windowSize) <= amplitude.length) {
+        const refWin = amplitude.slice(startIdx, startIdx + windowSize);
+        const nextWin = amplitude.slice(startIdx + windowSize, startIdx + 2 * windowSize);
+        const corr = crossCorrelation(nextWin, refWin);
+        const lag = corr.indexOf(Math.max(...corr)) - (windowSize - 1);
+        const ppi_samples = windowSize + lag;
+        const ppi_sec = ppi_samples / fs;
+        ppis.push(ppi_sec);
+        peakIndices.push(startIdx + windowSize + lag);
+        startIdx += windowSize;
+      }
+      return { ppis, peakIndices };
+    }
+
+    // ピーク検出法でPPI計算
+    function calculatePPIByPeaks(amplitude) {
+      const minPPI = Math.floor(fs * 0.25); // 最小PPI 0.25秒
+      const peaks = findPeaks(amplitude, minPPI);
+      const ppis = [];
+      for (let i = 1; i < peaks.length; i++) {
+        ppis.push((peaks[i] - peaks[i-1]) / fs);
+      }
+      // 外れ値除去
+      const validPpis = ppis.filter(ppi => ppi > 0.25 && ppi < 2.0);
+      return { ppis: validPpis, peakIndices: peaks };
     }
 
     document.getElementById('excelFile').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
+      
       const reader = new FileReader();
       reader.onload = function(ev) {
         const data = new Uint8Array(ev.target.result);
@@ -110,44 +341,19 @@
         const sheet = workbook.Sheets[sheetName];
         const raw = XLSX.utils.sheet_to_json(sheet, {header:1});
         const amplitude = raw.flat().filter(x => typeof x === 'number');
-        const output = document.getElementById('output');
+        
         const chartArea = document.querySelector('.chart-area');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const comparisonSummary = document.getElementById('comparisonSummary');
+        
         if (amplitude.length < 50) {
-          output.innerHTML = "<div class='error'>データが少なすぎます。もっと長い記録をアップロードしてください。</div>";
+          document.getElementById('correlationOutput').innerHTML = "<div class='error'>データが少なすぎます。</div>";
+          document.getElementById('peakOutput').innerHTML = "<div class='error'>データが少なすぎます。</div>";
           chartArea.style.display = "none";
+          resultsContainer.style.display = "none";
+          comparisonSummary.style.display = "none";
           return;
         }
-        // プロミネンス等パラメータ推定
-        const ampStd = stddev(amplitude);
-        const ampMax = Math.max(...amplitude);
-        const ampMin = Math.min(...amplitude);
-        const ampRange = ampMax - ampMin;
-        const minProminence = Math.max(ampRange * 0.12, ampStd * 0.7);
-
-        // minDistance推定（運動後想定: 最小0.35秒, 運動前: 最大2.5秒）
-        const minDistA = Math.floor(fs * 0.35);
-        const minDistB = Math.floor(fs * 0.40);
-
-        // --- 両方式でピーク検出 ---
-        const peaksA = findPeaksDistance(amplitude, minDistA);
-        const peaksB = findPeaksProminence(amplitude, minDistB, minProminence);
-
-        // --- PPI算出 ---
-        function calcPPIs(peaks) {
-          const ppis = [];
-          for (let i = 1; i < peaks.length; i++) {
-            ppis.push((peaks[i] - peaks[i-1]) / fs);
-          }
-          // 両方式で同じ範囲（0.35～2.5s）で外れ値除去
-          return ppis.filter(ppi => ppi > 0.35 && ppi < 2.5);
-        }
-        const validPpisA = calcPPIs(peaksA);
-        const validPpisB = calcPPIs(peaksB);
-
-        const meanPPIA = validPpisA.length > 0 ? (validPpisA.reduce((a,b)=>a+b,0)/validPpisA.length) : 0;
-        const stdPPIA = validPpisA.length > 1 ? Math.sqrt(validPpisA.reduce((a,b)=>a+(b-meanPPIA)**2,0)/(validPpisA.length-1)) : 0;
-        const meanPPIB = validPpisB.length > 0 ? (validPpisB.reduce((a,b)=>a+b,0)/validPpisB.length) : 0;
-        const stdPPIB = validPpisB.length > 1 ? Math.sqrt(validPpisB.reduce((a,b)=>a+(b-meanPPIB)**2,0)/(validPpisB.length-1)) : 0;
 
         // グラフ横幅調整
         let displayWidth = 2000;
@@ -162,13 +368,21 @@
 
         // 時刻配列
         const times = amplitude.map((_,i)=> i/fs);
+
+        // 両方の手法でPPI計算
+        const corrResult = calculatePPIByCorrelation(amplitude);
+        const peakResult = calculatePPIByPeaks(amplitude);
+
+        // グラフ描画
         if (ampChart) ampChart.destroy();
         chartArea.style.display = "";
+        const ctx = document.getElementById('ampChart').getContext('2d');
+        
+        const numLabels = times.length;
+        let stepSize = 1;
+        if (numLabels > 40) stepSize = Math.ceil(numLabels / 30);
 
-        // ピーク点はA・B両方描画（A赤、B緑）
-        const peaksASet = new Set(peaksA);
-        const peaksBSet = new Set(peaksB);
-        ampChart = new Chart(document.getElementById('ampChart').getContext('2d'), {
+        ampChart = new Chart(ctx, {
           type: 'line',
           data: {
             labels: times,
@@ -185,20 +399,20 @@
                 yAxisID: 'y',
               },
               {
-                label: 'Peak A',
-                data: times.map((t, i) => peaksASet.has(i) ? amplitude[i] : null),
+                label: 'Correlation Peaks',
+                data: times.map((t, i) => corrResult.peakIndices.includes(i) ? amplitude[i] : null),
                 pointRadius: 4,
-                pointBackgroundColor: "red",
+                pointBackgroundColor: "green",
                 type: "scatter",
                 showLine: false,
                 yAxisID: 'y',
                 borderWidth: 0,
               },
               {
-                label: 'Peak B',
-                data: times.map((t, i) => (peaksBSet.has(i) && !peaksASet.has(i)) ? amplitude[i] : null),
+                label: 'Detected Peaks',
+                data: times.map((t, i) => peakResult.peakIndices.includes(i) ? amplitude[i] : null),
                 pointRadius: 4,
-                pointBackgroundColor: "limegreen",
+                pointBackgroundColor: "red",
                 type: "scatter",
                 showLine: false,
                 yAxisID: 'y',
@@ -208,7 +422,14 @@
           },
           options: {
             plugins: {
-              legend: { display: false }
+              legend: { 
+                display: true,
+                labels: {
+                  filter: function(item, chart) {
+                    return item.text !== 'Amplitude';
+                  }
+                }
+              }
             },
             scales: {
               x: {
@@ -216,18 +437,13 @@
                 ticks: {
                   font: { size: 13 },
                   callback: function(value, index, ticks) {
-                    let stepSize = 1;
-                    if (times.length > 40) stepSize = Math.ceil(times.length / 30);
                     return index % stepSize === 0 ? this.getLabelForValue(value) : '';
                   },
                   maxRotation: 30,
                   minRotation: 0,
                   autoSkip: false,
                 },
-                grid: {
-                  display: true,
-                  color: "#e0e8f6"
-                }
+                grid: { display: true, color: "#e0e8f6" }
               },
               y: {
                 title: { display: true, text: "アンプリチュード", font: { size: 15 } },
@@ -237,10 +453,7 @@
                     return value.toExponential ? value.toExponential(2) : value;
                   }
                 },
-                grid: {
-                  display: true,
-                  color: "#e0e8f6"
-                }
+                grid: { display: true, color: "#e0e8f6" }
               }
             },
             responsive: false,
@@ -248,28 +461,55 @@
           }
         });
 
-        // 両方式表示
-        function genResultHTML(label, peaks, validPpis, meanPPI, stdPPI, colorName) {
-          let html = `<div class="result-method"><h2>${label}（ピーク点: <span style="color:${colorName}">●</span>）</h2>`;
-          if (validPpis.length === 0) {
-            html += "<div class='error'>PPIが検出できませんでした。</div></div>";
-          } else {
-            html += "<table><thead><tr><th>ピーク位置<br><small>(peak_index)</small></th><th>PPI（秒）</th></tr></thead><tbody>";
-            for (let i = 1; i < peaks.length; i++) {
-              const ppi = (peaks[i] - peaks[i-1]) / fs;
-              if (ppi > 0.35 && ppi < 2.5)
-                html += `<tr><td>${peaks[i]}</td><td>${ppi.toFixed(3)}</td></tr>`;
-            }
-            html += "</tbody></table>";
-            html += `<div class="summary">平均PPI：<span style="font-size:1.15em;">${ meanPPI.toFixed(3)} 秒</span><br>
-                     PPI標準偏差：<span style="font-size:1.08em;">${ stdPPI.toFixed(3)} 秒</span></div></div>`;
+        // 相互相関法結果表示
+        let corrHtml = "";
+        if (corrResult.ppis.length === 0) {
+          corrHtml = "<div class='error'>PPIが検出できませんでした。</div>";
+        } else {
+          corrHtml += "<table><thead><tr><th>ピーク位置</th><th>PPI（秒）</th></tr></thead><tbody>";
+          for (let i = 0; i < corrResult.ppis.length; i++) {
+            corrHtml += `<tr><td>${corrResult.peakIndices[i]}</td><td>${corrResult.ppis[i].toFixed(3)}</td></tr>`;
           }
-          return html;
+          corrHtml += "</tbody></table>";
+          const corrMean = corrResult.ppis.reduce((a,b)=>a+b,0)/corrResult.ppis.length;
+          const corrStd = stddev(corrResult.ppis);
+          corrHtml += `<div class="summary">平均PPI：${corrMean.toFixed(3)} 秒<br>標準偏差：${corrStd.toFixed(3)} 秒</div>`;
         }
-        let html = "";
-        html += genResultHTML("第一候補（minDistance重視・運動後向け）", peaksA, validPpisA, meanPPIA, stdPPIA, "red");
-        html += genResultHTML("第二候補（prominence重視・運動前向け）", peaksB, validPpisB, meanPPIB, stdPPIB, "limegreen");
-        output.innerHTML = html;
+        document.getElementById('correlationOutput').innerHTML = corrHtml;
+
+        // ピーク検出法結果表示
+        let peakHtml = "";
+        if (peakResult.ppis.length === 0) {
+          peakHtml = "<div class='error'>PPIが検出できませんでした。</div>";
+        } else {
+          peakHtml += "<table><thead><tr><th>ピーク位置</th><th>PPI（秒）</th></tr></thead><tbody>";
+          for (let i = 1; i < peakResult.peakIndices.length; i++) {
+            const ppi = (peakResult.peakIndices[i] - peakResult.peakIndices[i-1]) / fs;
+            peakHtml += `<tr><td>${peakResult.peakIndices[i]}</td><td>${ppi.toFixed(3)}</td></tr>`;
+          }
+          peakHtml += "</tbody></table>";
+          const peakMean = peakResult.ppis.reduce((a,b)=>a+b,0)/peakResult.ppis.length;
+          const peakStd = stddev(peakResult.ppis);
+          peakHtml += `<div class="summary">平均PPI：${peakMean.toFixed(3)} 秒<br>標準偏差：${peakStd.toFixed(3)} 秒</div>`;
+        }
+        document.getElementById('peakOutput').innerHTML = peakHtml;
+
+        // 比較結果表示
+        if (corrResult.ppis.length > 0 && peakResult.ppis.length > 0) {
+          const corrMean = corrResult.ppis.reduce((a,b)=>a+b,0)/corrResult.ppis.length;
+          const corrStd = stddev(corrResult.ppis);
+          const peakMean = peakResult.ppis.reduce((a,b)=>a+b,0)/peakResult.ppis.length;
+          const peakStd = stddev(peakResult.ppis);
+          
+          document.getElementById('corrMean').textContent = corrMean.toFixed(3) + ' 秒';
+          document.getElementById('peakMean').textContent = peakMean.toFixed(3) + ' 秒';
+          document.getElementById('corrStd').textContent = corrStd.toFixed(3) + ' 秒';
+          document.getElementById('peakStd').textContent = peakStd.toFixed(3) + ' 秒';
+          
+          comparisonSummary.style.display = "";
+        }
+
+        resultsContainer.style.display = "flex";
       };
       reader.readAsArrayBuffer(file);
     });
