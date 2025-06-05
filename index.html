@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>心拍周期（PPI）計算Webアプリ</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
@@ -14,7 +15,7 @@
       padding: 0;
     }
     .container {
-      max-width: 600px;
+      max-width: 700px;
       margin: 40px auto 0 auto;
       background: #fff;
       border-radius: 18px;
@@ -100,7 +101,27 @@
       font-weight: 500;
       font-size: 1.13em;
     }
-    @media (max-width: 650px) {
+    .chart-area {
+      margin-top: 38px;
+      background: #f7fbfd;
+      border-radius: 15px;
+      box-shadow: 0 2px 7px rgba(90,150,220,0.09);
+      padding: 20px 14px 28px 14px;
+      width: 100%;
+      overflow-x: auto;
+    }
+    .chart-area-inner {
+      width: 2000px;
+      min-width: 430px;
+      margin: 0 auto;
+    }
+    .chart-area canvas {
+      width: 2000px !important;
+      height: 300px !important;
+      background: #fff;
+      border-radius: 8px;
+    }
+    @media (max-width: 750px) {
       .container {
         max-width: 97vw;
         padding: 8vw 2vw 11vw 2vw;
@@ -111,6 +132,11 @@
       h1 {
         font-size: 1.15em;
       }
+      .chart-area-inner, .chart-area canvas {
+        width: 700px !important;
+        min-width: 250px !important;
+        height: 230px !important;
+      }
     }
   </style>
 </head>
@@ -119,23 +145,32 @@
     <h1>心拍周期（PPI）自動計算Webアプリ</h1>
     <p>Excelファイル（1列：アンプリチュードのみ）をアップロードしてください。</p>
     <input type="file" id="excelFile" accept=".xlsx, .xls"/>
+    <div class="chart-area" style="display:none">
+      <h3 style="text-align:center;color:#2562ad;font-size:1.05em;font-weight:600;margin:10px 0 18px 0;">アンプリチュード推移グラフ</h3>
+      <div class="chart-area-inner">
+        <canvas id="ampChart"></canvas>
+      </div>
+    </div>
     <div id="output"></div>
   </div>
   <script>
-    const fs = 409.6;
-    const windowSize = Math.round(fs * 1.0);
+    // --- 設定 ---
+    const fs = 409.6;  // サンプリング周波数
+    let ampChart = null;
 
-    function crossCorrelation(a, b) {
-      const n = a.length, m = b.length, len = n + m - 1, result = new Array(len).fill(0);
-      for (let lag = -(n - 1); lag < m; lag++) {
-        let sum = 0;
-        for (let i = 0; i < n; i++) {
-          const j = i + lag;
-          if (j >= 0 && j < m) sum += a[i] * b[j];
+    // 極大値ピーク検出（最小間隔つき）
+    function findPeaks(data, minDistance) {
+      const peaks = [];
+      let lastPeak = -minDistance;
+      for (let i = 1; i < data.length - 1; i++) {
+        if (data[i] > data[i-1] && data[i] > data[i+1]) {
+          if (i - lastPeak >= minDistance) {
+            peaks.push(i);
+            lastPeak = i;
+          }
         }
-        result[lag + n - 1] = sum;
       }
-      return result;
+      return peaks;
     }
 
     function stddev(arr) {
@@ -155,33 +190,131 @@
         const raw = XLSX.utils.sheet_to_json(sheet, {header:1});
         const amplitude = raw.flat().filter(x => typeof x === 'number');
         const output = document.getElementById('output');
-        if (amplitude.length < windowSize*2) {
+        const chartArea = document.querySelector('.chart-area');
+        if (amplitude.length < 50) {
           output.innerHTML = "<div class='error'>データが少なすぎます。もっと長い記録をアップロードしてください。</div>";
+          chartArea.style.display = "none";
           return;
         }
-        let ppis = [], peakIndices = [], startIdx = 0;
-        while ((startIdx + 2 * windowSize) <= amplitude.length) {
-          const refWin = amplitude.slice(startIdx, startIdx + windowSize);
-          const nextWin = amplitude.slice(startIdx + windowSize, startIdx + 2 * windowSize);
-          const corr = crossCorrelation(nextWin, refWin);
-          const lag = corr.indexOf(Math.max(...corr)) - (windowSize - 1);
-          const ppi_samples = windowSize + lag;
-          const ppi_sec = ppi_samples / fs;
-          ppis.push(ppi_sec);
-          peakIndices.push(startIdx + windowSize + lag);
-          startIdx += windowSize;
+
+        // グラフ横幅調整（データ長に応じて拡張）
+        let displayWidth = 2000;
+        if (amplitude.length > 3000) {
+          displayWidth = Math.max(2000, Math.ceil(amplitude.length * 0.65));
+        } else if (amplitude.length > 900) {
+          displayWidth = Math.max(1200, Math.ceil(amplitude.length * 0.8));
         }
+        document.querySelector('.chart-area-inner').style.width = displayWidth + "px";
+        document.getElementById('ampChart').width = displayWidth;
+        document.getElementById('ampChart').height = 300;
+
+        // 時刻配列（秒）
+        const times = amplitude.map((_,i)=> i/fs);
+
+        // --- ピーク検出 ---
+        const minPPI = Math.floor(fs * 0.25); // 最小PPI 0.25秒（最大心拍240bpm相当）
+        const peaks = findPeaks(amplitude, minPPI);
+
+        // PPI算出
+        const ppis = [];
+        for (let i = 1; i < peaks.length; i++) {
+          ppis.push((peaks[i] - peaks[i-1]) / fs);
+        }
+        // 外れ値除去（0.25s未満や2.0s超は除外）
+        const validPpis = ppis.filter(ppi => ppi > 0.25 && ppi < 2.0);
+
+        const meanPPI = validPpis.length > 0 ? (validPpis.reduce((a,b)=>a+b,0)/validPpis.length) : 0;
+        const stdPPI = validPpis.length > 1 ? Math.sqrt(validPpis.reduce((a,b)=>a+(b-meanPPI)**2,0)/(validPpis.length-1)) : 0;
+
+        // --- Chart.jsでグラフ描画 ---
+        if (ampChart) ampChart.destroy();
+        chartArea.style.display = "";
+        const ctx = document.getElementById('ampChart').getContext('2d');
+        // 横軸ラベル間引き用
+        const numLabels = times.length;
+        let stepSize = 1;
+        if (numLabels > 40) stepSize = Math.ceil(numLabels / 30);
+
+        ampChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: times,
+            datasets: [
+              {
+                label: 'Amplitude',
+                data: amplitude,
+                pointRadius: 0,
+                fill: false,
+                borderColor: "#337ab7",
+                backgroundColor: "#337ab7",
+                borderWidth: 1.4,
+                tension: 0.07,
+                yAxisID: 'y',
+              },
+              {
+                label: 'Peak',
+                data: times.map((t, i) => peaks.includes(i) ? amplitude[i] : null),
+                pointRadius: 4,
+                pointBackgroundColor: "red",
+                type: "scatter",
+                showLine: false,
+                yAxisID: 'y',
+                borderWidth: 0,
+              }
+            ]
+          },
+          options: {
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: "時刻 [秒]", font: { size: 15 } },
+                ticks: {
+                  font: { size: 13 },
+                  callback: function(value, index, ticks) {
+                    return index % stepSize === 0 ? this.getLabelForValue(value) : '';
+                  },
+                  maxRotation: 30,
+                  minRotation: 0,
+                  autoSkip: false,
+                },
+                grid: {
+                  display: true,
+                  color: "#e0e8f6"
+                }
+              },
+              y: {
+                title: { display: true, text: "アンプリチュード", font: { size: 15 } },
+                ticks: {
+                  font: { size: 13 },
+                  callback: function(value) {
+                    return value.toExponential ? value.toExponential(2) : value;
+                  }
+                },
+                grid: {
+                  display: true,
+                  color: "#e0e8f6"
+                }
+              }
+            },
+            responsive: false,
+            maintainAspectRatio: false
+          }
+        });
+
+        // --- 結果表示 ---
         let html = "";
-        if (ppis.length === 0) {
+        if (validPpis.length === 0) {
           html += "<div class='error'>PPIが検出できませんでした。</div>";
         } else {
           html += "<table><thead><tr><th>ピーク位置<br><small>(peak_index)</small></th><th>PPI（秒）</th></tr></thead><tbody>";
-          for (let i = 0; i < ppis.length; i++) {
-            html += `<tr><td>${peakIndices[i]}</td><td>${ppis[i].toFixed(3)}</td></tr>`;
+          for (let i = 1; i < peaks.length; i++) {
+            html += `<tr><td>${peaks[i]}</td><td>${((peaks[i] - peaks[i-1]) / fs).toFixed(3)}</td></tr>`;
           }
           html += "</tbody></table>";
-          html += `<div class="summary">平均PPI：<span style="font-size:1.15em;">${ (ppis.reduce((a,b)=>a+b,0)/ppis.length).toFixed(3)} 秒</span><br>
-                   PPI標準偏差：<span style="font-size:1.08em;">${ stddev(ppis).toFixed(3)} 秒</span></div>`;
+          html += `<div class="summary">平均PPI：<span style="font-size:1.15em;">${ meanPPI.toFixed(3)} 秒</span><br>
+                   PPI標準偏差：<span style="font-size:1.08em;">${ stdPPI.toFixed(3)} 秒</span></div>`;
         }
         output.innerHTML = html;
       };
